@@ -1,0 +1,55 @@
+#######################################
+# Syntax Coloring Map For ftPwrDrive
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+ftPwrDrive	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+Watchdog		KEYWORD2
+setMicrostepMode	KEYWORD2
+getMicrostepMode	KEYWORD2
+setRelDistance		KEYWORD2
+getRelDistance		KEYWORD2
+setAbsDistance		KEYWORD2
+getAbsDistance		KEYWORD2
+getStepsToGo		KEYWORD2
+setMaxSpeed		KEYWORD2
+getMaxSpeed		KEYWORD2
+startMoving		KEYWORD2
+startMovingAll		KEYWORD2
+isMoving		KEYWORD2
+isMovingAll		KEYWORD2
+getState		KEYWORD2
+setPosition		KEYWORD2
+setPositionAll		KEYWORD2
+getPosition		KEYWORD2
+getPositionAll		KEYWORD2
+setAcceleration		KEYWORD2
+setAccelerationAll	KEYWORD2
+getAcceleration		KEYWORD2
+getAccelerationAll	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+
+FTPWRDRIVE_FULLSTEP		LITERAL1
+FTPWRDRIVE_HALFSTEP		LITERAL1
+FTPWRDRIVE_QUARTERSTEP		LITERAL1
+FTPWRDRIVE_EIGTHSTEP		LITERAL1
+FTPWRDRIVE_SIXTEENTHSTEP	LITERAL1
+FTPWRDRIVE_MOTORS		LITERAL1
+FTPWRDRIVE_M1			LITERAL1
+FTPWRDRIVE_M2			LITERAL1
+FTPWRDRIVE_M3			LITERAL1 
+FTPWRDRIVE_M4			LITERAL1
+FTPWRDRIVE_ISMOVING		LITERAL1
+FTPWRDRIVE_ENDSTOP		LITERAL1
+FTPWRDRIVE_EMERCENCYSTOP	LITERAL1

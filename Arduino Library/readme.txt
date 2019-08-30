@@ -1,0 +1,1 @@
+To connect a ftPwrDrive to an Arduino board, please use the ftDuino implementation.

@@ -1,0 +1,16 @@
+{
+  "name": "ftPwrDrive",
+  "keywords": "ftPwrDrive",
+  "description": "Interface libray to control a ftPwrDrive stepper controller with arduino or ftDuino boards.",
+  "repository":
+  {
+    "type": "git",
+    "url": "https://github.com/electrofuzzis/ftPwrDrive"
+  },
+  "frameworks": "arduino",
+  "platforms":
+  [
+    "atmelavr",
+    "ftDuino"
+  ]
+}
