@@ -55,9 +55,22 @@ void i2cBuffer::push( long v ) {
   len += sizeof(v);
 }
 
-long i2cBuffer::pop( uint8_t pos ) {
+void i2cBuffer::push( int v ) {
+  // writes an int into the buffer
+  memcpy( &data[len], &v, sizeof(v) );
+  len += sizeof(v);
+}
+
+long i2cBuffer::popLong( uint8_t pos ) {
   // reads a long out of the buffer
   long v;
+  memcpy( &v, &data[pos], sizeof(v) );
+  return v;
+}
+
+int i2cBuffer::popInt( uint8_t pos ) {
+  // reads an int out of the buffer
+  int v;
   memcpy( &v, &data[pos], sizeof(v) );
   return v;
 }
@@ -78,6 +91,14 @@ void i2cBuffer::sendData( uint8_t address, uint8_t cmd, uint8_t v1 ) {
 }
 
 void i2cBuffer::sendData( uint8_t address, uint8_t cmd, long v1 ) {
+  // send a command with a long value
+  len = 0;
+  push( cmd );
+  push( v1 );
+  sendBuffer( address );
+}
+
+void i2cBuffer::sendData( uint8_t address, uint8_t cmd, int v1 ) {
   // send a command with a long value
   len = 0;
   push( cmd );
@@ -125,15 +146,32 @@ long i2cBuffer::receiveLong( uint8_t address, uint8_t cmd, uint8_t v1 ) {
   // receive a long value 
   sendData( address, cmd, v1 );
   receiveBuffer( address, 4 );
-  return pop( 0 );
+  return popLong( 0 );
 }
 
 void i2cBuffer::receive4Long( uint8_t address, uint8_t cmd, long &v1, long &v2, long &v3, long &v4 ) {
   // receive 4 long values
   sendData( address, cmd );
   receiveBuffer( address, 16 );
-  v1 = pop( 0 );
-  v2 = pop( 4 );
-  v3 = pop( 8 );
-  v4 = pop( 12 );
+  v1 = popLong( 0 );
+  v2 = popLong( 4 );
+  v3 = popLong( 8 );
+  v4 = popLong( 12 );
+} 
+
+int i2cBuffer::receiveInt( uint8_t address, uint8_t cmd, uint8_t v1 ) {
+  // receive an int value 
+  sendData( address, cmd, v1 );
+  receiveBuffer( address, 2 );
+  return popInt( 0 );
+}
+
+void i2cBuffer::receive4Int( uint8_t address, uint8_t cmd, int &v1, int &v2, int &v3, int &v4 ) {
+  // receive 4 int values
+  sendData( address, cmd );
+  receiveBuffer( address, 16 );
+  v1 = popInt( 0 );
+  v2 = popInt( 2 );
+  v3 = popInt( 4 );
+  v4 = popInt( 8 );
 } 

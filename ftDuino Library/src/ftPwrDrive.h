@@ -101,6 +101,30 @@ class ftPwrDrive {
     void getAccelerationAll( long &a1, long &a2, long &a3, long &a4 );
       // get acceleration of all motors
 
+    void setServo( uint8_t servo, int position );
+      // set servo position
+
+    int getServo( uint8_t servo );
+      // get servo position
+
+    void setServoAll( int p1, int p2, int p3, int p4 );
+      // set all servos positions
+
+    void getServoAll( int &p1, int &p2, int &p3, int &p4 );
+      // get all servo positions
+      
+    void setServoOffset( uint8_t servo, int offset );
+      // set servo offset
+
+    int getServoOffset( uint8_t servo );
+      // get servo offset
+
+    void setServoOffsetAll( int o1, int o2, int o3, int o4 );
+      // set servo offset all
+
+    void getServoOffsetAll( int &o1, int &o2, int &o3, int &o4 );
+      // get all servo offset
+
   private:
     uint8_t i2cAddress = 32;
 };

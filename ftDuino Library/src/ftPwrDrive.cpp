@@ -42,6 +42,15 @@
 #define CMD_SETACCELERATIONALL 21  // void setAccelerationAll( long acc1, long acc2, long acc3, long acc4 ) set acceleration of all motors
 #define CMD_GETACCELERATIONALL 22  // (long,long,long,long) getAccelerationAll( void )                   get acceleration of all motors
 
+#define CMD_SETSERVO           23  // void setServo( uint8_t servo, int position )                       set servo position
+#define CMD_GETSERVO           24  // int getServo( uint8_t servo )                                      get servo position
+#define CMD_SETSERVOALL        25  // void setServoAll( int p1, int p2, int p3, int p4 )                 set all servos positions
+#define CMD_GETSERVOALL        26  // (int, int, int, int) getServoAll( void )                           get all servo positions
+#define CMD_SETSERVOOFFSET     27  // void setServoOffset( uint8_t servo, int Offset )                   set servo offset
+#define CMD_GETSERVOOFFSET     28  // int getServoOffset( void )                                         get servo offset
+#define CMD_SETSERVOOFFSETALL  29  // void serServoOffsetAll( int o1, int o2, int o3, int o4 )           set servo offset all
+#define CMD_GETSERVOOFFSETALL  30  // (int, int, int, int) getServoOffsetAll( void )                     get all servo offset
+
 i2cBuffer i2c;
 
 ftPwrDrive::ftPwrDrive( uint8_t myI2CAddress ) { 
@@ -155,4 +164,43 @@ void ftPwrDrive::getAccelerationAll( long &a1, long &a2, long &a3, long &a4 ) {
 
   i2c.receive4Long( i2cAddress, CMD_GETACCELERATIONALL, a1, a2, a3, a4 );
 }
-   
+
+void ftPwrDrive::setServo( uint8_t servo, int position ) {
+  // set servo position
+  i2c.sendData( i2cAddress, CMD_SETSERVO, servo, position );
+}
+
+int ftPwrDrive::getServo( uint8_t servo ) {
+  // get servo position
+  return i2c.receiveInt( i2cAddress, CMD_GETSERVO, servo );
+}
+
+void ftPwrDrive::setServoAll( int p1, int p2, int p3, int p4 ) {
+  // set all servos positions
+  i2c.sendData( i2cAddress, CMD_SETSERVOALL, p1, p2, p3, p4 );
+}
+
+void ftPwrDrive::getServoAll( int &p1, int &p2, int &p3, int &p4 ) {
+  // get all servo positions
+  i2c.receive4Int( i2cAddress, CMD_GETSERVOALL, p1, p2, p3, p4 );
+}
+      
+void ftPwrDrive::setServoOffset( uint8_t servo, int offset ) {
+  // set servo offset
+  i2c.sendData( i2cAddress, CMD_SETSERVOOFFSET, servo, offset );
+}
+
+int ftPwrDrive::getServoOffset( uint8_t servo ) {
+  // get servo offset
+  return i2c.receiveInt( i2cAddress, CMD_GETSERVOOFFSET, servo );
+}
+
+void ftPwrDrive::setServoOffsetAll( int o1, int o2, int o3, int o4 ) {
+  // set servo offset all
+  i2c.sendData( i2cAddress, CMD_SETSERVOOFFSETALL, o1, o2, o3, o4 );
+}
+
+void ftPwrDrive::getServoOffsetAll( int &o1, int &o2, int &o3, int &o4 ) {
+  // get all servo offset
+  i2c.receive4Int( i2cAddress, CMD_GETSERVOOFFSETALL, o1, o2, o3, o4 );
+}
