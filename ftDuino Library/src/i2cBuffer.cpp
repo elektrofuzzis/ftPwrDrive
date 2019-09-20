@@ -1,17 +1,20 @@
-#include <Wire.h>
 #include "i2cBuffer.h"
+#include <Wire.h>
 
 void i2cBuffer::sendBuffer( uint8_t address  ) {
   // send data
 
-/*
-  Serial.print("sendBuffer "); Serial.print( address ); Serial.print(" ");
-  for (int i=0; i<len; i++ ) {
-    Serial.print( data[i], HEX );
-    Serial.print(" ");
-  }
-  Serial.println();
-*/  
+  #ifdef DEBUG_COM
+    Serial.print("sendBuffer "); Serial.print( address ); Serial.print(" ");
+  
+    for (int i=0; i<len; i++ ) {
+      Serial.print( data[i], HEX );
+      Serial.print(" ");
+    }
+  
+    Serial.println();
+  #endif
+ 
   Wire.beginTransmission( address );
   Wire.write( data, len );
   Wire.endTransmission();
@@ -20,7 +23,13 @@ void i2cBuffer::sendBuffer( uint8_t address  ) {
 void i2cBuffer::receiveBuffer( uint8_t address, uint8_t quantity ) {
   // receive data
 
-//  Serial.print( "receiveBuffer( " ); Serial.print( address ), Serial.print(","); Serial.print( quantity ); Serial.println(")");
+  #ifdef DEBUG_COM
+    Serial.print( "receiveBuffer( " ); Serial.print( address ), Serial.print(","); Serial.print( quantity ); Serial.println(")");
+  #endif
+
+  // there is always a write before reading data.
+  // We need some microseconds to avoid getting struggled
+  delayMicroseconds(60);
 
   len = 0;
 
@@ -32,10 +41,17 @@ void i2cBuffer::receiveBuffer( uint8_t address, uint8_t quantity ) {
   while (Wire.available()) { 
     x = Wire.read();
     data[len++] = x;
-//    Serial.print( x, HEX ); 
-//    Serial.print( " " );
+
+    #ifdef DEBUG_COM
+      Serial.print( x, HEX ); 
+      Serial.print( " " );
+    #endif
+    
   }
-//  Serial.println();
+
+  #ifdef DEBUG_COM
+    Serial.println();
+  #endif
   
   // fillup buffer
   for (uint8_t i=len;i<16;i++) {
@@ -106,6 +122,16 @@ void i2cBuffer::sendData( uint8_t address, uint8_t cmd, int v1 ) {
   sendBuffer( address );
 }
 
+void i2cBuffer::sendData( uint8_t address, uint8_t cmd, uint8_t v1, long v2, uint8_t v3 ) {
+  // send a command with a uint8_t, a long value and another uint8_t
+  len = 0;
+  push( cmd );
+  push( v1 );
+  push( v2 );
+  push( v3 );
+  sendBuffer( address );
+}
+
 void i2cBuffer::sendData( uint8_t address, uint8_t cmd, uint8_t v1, long v2 ) {
   // send a command with a uint8_t and a long value
   len = 0;
@@ -114,6 +140,7 @@ void i2cBuffer::sendData( uint8_t address, uint8_t cmd, uint8_t v1, long v2 ) {
   push( v2 );
   sendBuffer( address );
 }
+
 
 void i2cBuffer::sendData( uint8_t address, uint8_t cmd,long v1, long v2, long v3, long v4 ) {
   // send a command with 4 long values

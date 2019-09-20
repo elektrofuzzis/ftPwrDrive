@@ -30,7 +30,7 @@
 #define CMD_ISMOVING           12  // boolean isMoving( uint8_t motor )                                  check, if a motor is moving
 #define CMD_ISMOVINGALL        13  // uint8_t isMovingAll(  )                                            return value is uint8_tmask, flag 1 is motor#1, flag2 is motor #2, ...
 
-#define CMD_GETSTATE           14  // uint8_t getState( uint8_t motor )                                  8754321  - flag 1 motor is running, flag 2 endstop, flag 3 EMS, flag 4 position overrun
+#define CMD_GETSTATE           14  // uint8_t getState( uint8_t motor )                                  8754321  - flag 1 motor is running, flag 2 endstop, flag 3 EMS, flag 4 HOMING
 
 #define CMD_SETPOSITION        15  // void setPosition( uint8_t motor, long position )                   set position
 #define CMD_SETPOSITIONALL     16  // void setPositionAll( long p1, long p2, long p3, long p4 )          set position of all motors
@@ -42,14 +42,17 @@
 #define CMD_SETACCELERATIONALL 21  // void setAccelerationAll( long acc1, long acc2, long acc3, long acc4 ) set acceleration of all motors
 #define CMD_GETACCELERATIONALL 22  // (long,long,long,long) getAccelerationAll( void )                   get acceleration of all motors
 
-#define CMD_SETSERVO           23  // void setServo( uint8_t servo, int position )                       set servo position
-#define CMD_GETSERVO           24  // int getServo( uint8_t servo )                                      get servo position
-#define CMD_SETSERVOALL        25  // void setServoAll( int p1, int p2, int p3, int p4 )                 set all servos positions
-#define CMD_GETSERVOALL        26  // (int, int, int, int) getServoAll( void )                           get all servo positions
-#define CMD_SETSERVOOFFSET     27  // void setServoOffset( uint8_t servo, int Offset )                   set servo offset
-#define CMD_GETSERVOOFFSET     28  // int getServoOffset( void )                                         get servo offset
-#define CMD_SETSERVOOFFSETALL  29  // void serServoOffsetAll( int o1, int o2, int o3, int o4 )           set servo offset all
-#define CMD_GETSERVOOFFSETALL  30  // (int, int, int, int) getServoOffsetAll( void )                     get all servo offset
+#define CMD_SETSERVO           23  // void setServo( uint8_t servo, long position )                      set servo position
+#define CMD_GETSERVO           24  // long getServo( uint8_t servo )                                     get servo position
+#define CMD_SETSERVOALL        25  // void setServoAll( long p1, long p2, long p3, long p4 )             set all servos positions
+#define CMD_GETSERVOALL        26  // (long, long, long, long) getServoAll( void )                       get all servo positions
+#define CMD_SETSERVOOFFSET     27  // void setServoOffset( uint8_t servo, long Offset )                  set servo offset
+#define CMD_GETSERVOOFFSET     28  // long getServoOffset( void )                                        get servo offset
+#define CMD_SETSERVOOFFSETALL  29  // void serServoOffsetAll( long o1, long o2, longnt o3, long o4 )     set servo offset all
+#define CMD_GETSERVOOFFSETALL  30  // (long, long, long, long) getServoOffsetAll( void )                 get all servo offset
+#define CMD_SETSERVOONOFF      31  // void setServoOnOff( uint8_t servo, boolean OnOff )                 set servo pin On or Off without PWM
+
+#define CMD_HOMING             32  // void homing( uint8_t motor, long maxDistance, boolean disableOnStop) homing of motor "motor": run max. maxDistance or until endstop is reached. 
 
 i2cBuffer i2c;
 
@@ -82,6 +85,14 @@ void ftPwrDrive::setRelDistance( uint8_t motor, long distance ) {
 void ftPwrDrive::setAbsDistance( uint8_t motor, long distance ) {
   // set a absolute distance to go
   i2c.sendData( i2cAddress, CMD_SETABSDISTANCE, motor, distance );
+}
+
+void ftPwrDrive::setAbsDistanceAll( long d1, long d2, long d3, long d4 ) {
+  // set a absolute distance to go for all motors
+  setAbsDistance( FTPWRDRIVE_M1, d1 );
+  setAbsDistance( FTPWRDRIVE_M2, d2 );
+  setAbsDistance( FTPWRDRIVE_M3, d3 );
+  setAbsDistance( FTPWRDRIVE_M4, d4 );
 }
 
 long ftPwrDrive::getStepsToGo( uint8_t motor ) {
@@ -120,8 +131,20 @@ uint8_t ftPwrDrive::isMovingAll( void ) {
 }
 
 uint8_t ftPwrDrive::getState( uint8_t motor ) {
-  // 8754321  - flag 1 motor is running, flag 2 endstop, flag 3 EMS, flag 4 position overrun
-  return i2c.receiveuint8_t( i2cAddress, CMD_GETSTATE );
+  // 8754321  - flag 1 motor is running, flag 2 endstop, flag 3 EMS, flag 4 homing
+  
+  uint8_t x = i2c.receiveuint8_t( i2cAddress, CMD_GETSTATE, motor );
+  return x;
+}
+
+boolean ftPwrDrive::endStopActive( uint8_t motor ) {
+  // check, if end stop is pressed
+  return i2c.receiveuint8_t( i2cAddress, CMD_GETSTATE, motor ) & 0x02;
+}
+
+boolean ftPwrDrive::emergencyStopActive( void ) {
+  // check, if emergeny stop is pressed
+  return i2c.receiveuint8_t( i2cAddress, CMD_GETSTATE, FTPWRDRIVE_M1 ) & 0x04;
 }
 
 void ftPwrDrive::setPosition( uint8_t motor, long position ) {
@@ -165,42 +188,66 @@ void ftPwrDrive::getAccelerationAll( long &a1, long &a2, long &a3, long &a4 ) {
   i2c.receive4Long( i2cAddress, CMD_GETACCELERATIONALL, a1, a2, a3, a4 );
 }
 
-void ftPwrDrive::setServo( uint8_t servo, int position ) {
+void ftPwrDrive::setServo( uint8_t servo, long position ) {
   // set servo position
   i2c.sendData( i2cAddress, CMD_SETSERVO, servo, position );
 }
 
-int ftPwrDrive::getServo( uint8_t servo ) {
+long ftPwrDrive::getServo( uint8_t servo ) {
   // get servo position
-  return i2c.receiveInt( i2cAddress, CMD_GETSERVO, servo );
+  return i2c.receiveLong( i2cAddress, CMD_GETSERVO, servo );
 }
 
-void ftPwrDrive::setServoAll( int p1, int p2, int p3, int p4 ) {
+void ftPwrDrive::setServoAll( long p1, long p2, long p3, long p4 ) {
   // set all servos positions
   i2c.sendData( i2cAddress, CMD_SETSERVOALL, p1, p2, p3, p4 );
 }
 
-void ftPwrDrive::getServoAll( int &p1, int &p2, int &p3, int &p4 ) {
+void ftPwrDrive::getServoAll( long &p1, long &p2, long &p3, long &p4 ) {
   // get all servo positions
-  i2c.receive4Int( i2cAddress, CMD_GETSERVOALL, p1, p2, p3, p4 );
+  i2c.receive4Long( i2cAddress, CMD_GETSERVOALL, p1, p2, p3, p4 );
 }
       
-void ftPwrDrive::setServoOffset( uint8_t servo, int offset ) {
+void ftPwrDrive::setServoOffset( uint8_t servo, long offset ) {
   // set servo offset
   i2c.sendData( i2cAddress, CMD_SETSERVOOFFSET, servo, offset );
 }
 
-int ftPwrDrive::getServoOffset( uint8_t servo ) {
+long ftPwrDrive::getServoOffset( uint8_t servo ) {
   // get servo offset
-  return i2c.receiveInt( i2cAddress, CMD_GETSERVOOFFSET, servo );
+  return i2c.receiveLong( i2cAddress, CMD_GETSERVOOFFSET, servo );
 }
 
-void ftPwrDrive::setServoOffsetAll( int o1, int o2, int o3, int o4 ) {
+void ftPwrDrive::setServoOffsetAll( long o1, long o2, long o3, long o4 ) {
   // set servo offset all
   i2c.sendData( i2cAddress, CMD_SETSERVOOFFSETALL, o1, o2, o3, o4 );
 }
 
-void ftPwrDrive::getServoOffsetAll( int &o1, int &o2, int &o3, int &o4 ) {
+void ftPwrDrive::getServoOffsetAll( long &o1, long &o2, long &o3, long &o4 ) {
   // get all servo offset
-  i2c.receive4Int( i2cAddress, CMD_GETSERVOOFFSETALL, o1, o2, o3, o4 );
+  i2c.receive4Long( i2cAddress, CMD_GETSERVOOFFSETALL, o1, o2, o3, o4 );
+}
+
+void ftPwrDrive::setServoOnOff( uint8_t servo, boolean on ) {
+  // set servo pin On or Off without PWM
+  i2c.sendData( i2cAddress, CMD_SETSERVOONOFF, servo, on );
+}
+
+void ftPwrDrive::homing( uint8_t motor, long maxDistance, boolean disableOnStop = true ) {
+  // homing of motor using end stop
+  i2c.sendData( i2cAddress, CMD_HOMING, motor, maxDistance, disableOnStop );
+}
+
+boolean ftPwrDrive::isHoming( uint8_t motor ) {
+  // check, homing is active
+  return getState( motor ) & FTPWRDRIVE_HOMING;
+}
+
+void ftPwrDrive::wait( uint8_t motor_mask, uint16_t interval = 100 ) {
+  // wait until all motors in motor_mask completed their work
+
+  while ( isMovingAll() & motor_mask ) {
+    delay( interval );
+  }
+
 }

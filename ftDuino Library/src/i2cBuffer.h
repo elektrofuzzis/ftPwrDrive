@@ -25,6 +25,8 @@ class i2cBuffer {
       // send a command with a uint8_t 
     void sendData( uint8_t address, uint8_t cmd, int v1 );
       // send a command with a int
+    void sendData( uint8_t address, uint8_t cmd, uint8_t v1, long v2, uint8_t v3 ) ;
+      // send a command with a uint8_t, a long value and another uint8_t
     void sendData( uint8_t address, uint8_t cmd, uint8_t v1, long v2 );
       // send a command with a uint8_t and a long value
     void sendData( uint8_t address, uint8_t cmd, long v1, long v2, long v3, long v4 );
