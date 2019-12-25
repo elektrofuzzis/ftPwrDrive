@@ -2,10 +2,14 @@
 I²C based stepper motor driver for fischertechnik, Arduino &amp; Raspberry
 
 Please checkout the <a href="https://github.com/elektrofuzzis/ftPwrDrive/wiki">online manual</a>.
+Since the hardware is a complex smd pcb, you could buy a plug&play device at <a hrerf="https://gundermann-software.de/shop/">gundermann.org</a>.
+
 
 <hr width="100%" />
 
-I²C
+Schrittmotortreiber für fischertechnik, Arduino &amp; Raspberry
+Bitte lesen Sie das <a href="https://github.com/elektrofuzzis/ftPwrDrive/wiki">Online Manual</a>.
+
 
 #Arduino & ftDuino Interface
 
