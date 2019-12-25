@@ -1,6 +1,8 @@
 # ftPwrDrive
 I2C based stepper motor driver for fischertechnik, Arduino &amp; Raspberry
 
+Please checkout the online manual.
+
 #Arduino & ftDuino Interface
 
 - Download "ftDuino Library/ftPwrDrive.zip"
