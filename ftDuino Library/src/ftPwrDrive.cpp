@@ -2,9 +2,11 @@
 //
 // ftPwrDrive Arduino Interface
 //
-// 25.08.2019 V0.9 / latest version
+// 31.12.2019 V0.94 / latest version
 //
 // (C) 2019 Christian Bergschneider & Stefan Fuss
+//
+// PLEASE USE AT LEAST FIRMWARE 0.94 !!!
 //
 ///////////////////////////////////////////////////
 
@@ -54,6 +56,9 @@
 
 #define CMD_HOMING             32  // void homing( uint8_t motor, long maxDistance, boolean disableOnStop) homing of motor "motor": run max. maxDistance or until endstop is reached. 
 
+#define CMD_STOPMOVING         33  // void stopMoving( uint8_t motor )                                  stop motor moving
+#define CMD_STOPMOVINGALL      34  // void stopMovingAll( uint8_t maskMotor )                           same as StartMoving, but using uint8_t masks
+
 i2cBuffer i2c;
 
 ftPwrDrive::ftPwrDrive( uint8_t myI2CAddress ) { 
@@ -89,10 +94,10 @@ void ftPwrDrive::setAbsDistance( uint8_t motor, long distance ) {
 
 void ftPwrDrive::setAbsDistanceAll( long d1, long d2, long d3, long d4 ) {
   // set a absolute distance to go for all motors
-  setAbsDistance( FTPWRDRIVE_M1, d1 );
-  setAbsDistance( FTPWRDRIVE_M2, d2 );
-  setAbsDistance( FTPWRDRIVE_M3, d3 );
-  setAbsDistance( FTPWRDRIVE_M4, d4 );
+  setAbsDistance( M1, d1 );
+  setAbsDistance( M2, d2 );
+  setAbsDistance( M3, d3 );
+  setAbsDistance( M4, d4 );
 }
 
 long ftPwrDrive::getStepsToGo( uint8_t motor ) {
@@ -115,9 +120,19 @@ void ftPwrDrive::startMoving( uint8_t motor, boolean disableOnStop = true ) {
   i2c.sendData( i2cAddress, CMD_STARTMOVING, motor, disableOnStop );
 }
 
-void ftPwrDrive::startMovingAll( uint8_t maskMotor, uint8_t maskDisableOnStop = FTPWRDRIVE_M1|FTPWRDRIVE_M2|FTPWRDRIVE_M3|FTPWRDRIVE_M4  ) {
+void ftPwrDrive::startMovingAll( uint8_t maskMotor, uint8_t maskDisableOnStop = M1|M2|M3|M4  ) {
   // same as StartMoving, but using uint8_t masks
   i2c.sendData( i2cAddress, CMD_STARTMOVINGALL, maskMotor, maskDisableOnStop );
+}
+
+void ftPwrDrive::stopMoving( uint8_t motor ) {
+  // stop motor moving immediately
+  i2c.sendData( i2cAddress, CMD_STOPMOVING, motor );
+}
+
+void ftPwrDrive::stopMovingAll( uint8_t maskMotor = M1|M2|M3|M4  ) {
+  // same as stopMoving, but using uint8_t masks
+  i2c.sendData( i2cAddress, CMD_STOPMOVINGALL, maskMotor );
 }
 
 boolean ftPwrDrive::isMoving( uint8_t motor ) {
@@ -144,7 +159,7 @@ boolean ftPwrDrive::endStopActive( uint8_t motor ) {
 
 boolean ftPwrDrive::emergencyStopActive( void ) {
   // check, if emergeny stop is pressed
-  return i2c.receiveuint8_t( i2cAddress, CMD_GETSTATE, FTPWRDRIVE_M1 ) & 0x04;
+  return i2c.receiveuint8_t( i2cAddress, CMD_GETSTATE, M1 ) & 0x04;
 }
 
 void ftPwrDrive::setPosition( uint8_t motor, long position ) {
@@ -240,7 +255,7 @@ void ftPwrDrive::homing( uint8_t motor, long maxDistance, boolean disableOnStop 
 
 boolean ftPwrDrive::isHoming( uint8_t motor ) {
   // check, homing is active
-  return getState( motor ) & FTPWRDRIVE_HOMING;
+  return getState( motor ) & HOMING;
 }
 
 void ftPwrDrive::wait( uint8_t motor_mask, uint16_t interval = 100 ) {
@@ -250,4 +265,56 @@ void ftPwrDrive::wait( uint8_t motor_mask, uint16_t interval = 100 ) {
     delay( interval );
   }
 
+}
+
+float ftPwrDrive::setGearFactor( uint8_t motor, long gear1, long gear2 ) {
+  // Sets the gear factor. Please read setRelDistanceR for details.
+  return setGearFactor( motor, (float) gear1, (float) gear2 );
+}
+
+float ftPwrDrive::setGearFactor( uint8_t motor, float gear1, float gear2 ) {
+  // Sets the gear factor. Please read setRelDistanceR for details.
+ 
+  return gearFactor[ motorIndex(motor) ] = gear1 / gear2;
+ 
+}
+
+void ftPwrDrive::setRelDistanceR( uint8_t motor, float distance ) {
+  // Sets the relative distance in R - real units.
+  // To use this function, you should det your gear factor by setGearFactor, first.
+  // motor - M1..M4
+  // distance - relative distance in real units.
+  // Example1:
+  //   setGearFactor( Z10, Z40)  sets your gear to motor -> Z10 -> Z40. Every turn of your motor will devided by 4.
+  //   setRelDistanceR( M1, 10 ) will move your gear 10 times. The motor will run 10 * 40 * 200 steps. (200 steps are one turn of your motor).
+  // Example2:
+  //   setGearFactor( 1, WORMSCREW )  sets your gear to motor -> Wormscrew. Every turn of your motor will move your linear system by 5 mm.
+  //   setRelDistanceR( M1, 10 ) will move linear system by 10 mm. The motor will run 10 * 5 * 200 steps. (200 steps are one turn of your motor).
+
+  setRelDistance( motor, gearFactor[ motorIndex( motor ) ] * 200 * distance );
+
+}
+
+void ftPwrDrive::setAbsDistanceR( uint8_t motor, float distance ) {
+  // Sets the absolute distance in R - real units. Please read setRelDistanceR for details.
+
+  setAbsDistance( motor, gearFactor[ motorIndex( motor ) ] * 200 * distance );
+
+}
+
+uint8_t ftPwrDrive::motorIndex( uint8_t motor ) {
+  // returns the index (0..3) of a motor
+  switch (motor) {
+    case M1: 
+      return 0;
+    case M2: 
+      return 1;
+    case M3: 
+      return 2;
+    case M4: 
+      return 3;
+    default:
+      return 0;   
+  }
+  
 }

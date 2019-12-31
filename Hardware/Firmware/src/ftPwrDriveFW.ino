@@ -1,8 +1,8 @@
 ////////////////////////////////////////////////////
 //
-// ftPwrDrive2 Firmware
+// ftPwrDrive Firmware
 //
-// 19.09.2019 V0.93 / latest version
+// 31.12.2019 V0.94 / latest version
 //
 // (C) 2019 Christian Bergschneider & Stefan Fuss
 //
@@ -20,7 +20,7 @@
 
 // ********* some useful definitions *********
 
-#define myVersion 0.93
+#define myVersion 0.94
 
 // micro stepping modes
 #define FULLSTEP      0
@@ -70,6 +70,9 @@
 #define CMD_SETSERVOONOFF      31  // void setServoOnOff( uint8_t servo, boolean OnOff )                 set servo pin On or Off without PWM
 
 #define CMD_HOMING             32  // void homing( uint8_t motor, long maxDistance, boolean disableOnStop) homing of motor "motor": run max. maxDistance or until endstop is reached. 
+
+#define CMD_STOPMOVING         33  // void stopMoving( uint8_t motor )                                  stop motor moving
+#define CMD_STOPMOVINGALL      34  // void stopMovingAll( uint8_t maskMotor )                           same as StartMoving, but using uint8_t masks
 
 #define stepperInterval        100  // 10kHz
 #define servoInterval           25  // 40kHz
@@ -130,8 +133,10 @@ t_CmdBlock CmdBlock;
 uint8_t returnBuffer[16];
 uint8_t returnBytes = 0;
 
-// watchdog
-long watchdog, watchdogCounter = 0;
+// watchdog:
+//  -1 watchdog deactivated
+//  >0 time in millis when the watchdog should stop the system
+long    watchdog = -1;
 
 // i²c-address
 int myI2CBusAddress = 0x20;
@@ -562,7 +567,7 @@ void StepperTimer( void ) {
   boolean endStop;
 
   emergencyStop = !digitalRead( EMS );
- 
+
   // check all steppers
   for (i=0; i<MaxStepper; i++ ) {
 
@@ -635,8 +640,9 @@ void StepperTimer( void ) {
 
 void setWatchdog( long w ) {
   // activates the watchdog timer
-  
-  watchdog = w;
+
+  // store the time, when the watchdog timer should stop the system
+  watchdog = millis() + w;
   
 }
 
@@ -679,8 +685,8 @@ void startMoving( uint8_t motor, boolean disableOnStop ) {
   if (!(emergencyStop || Stepper[motor].endStop )) {
 
     Stepper[motor].disableOnStop = disableOnStop;
-    write595( ENABLE[motor], 0 );  // set enable
-    Stepper[motor].isMoving = true;  // start interrupt working
+    write595( ENABLE[motor], 0 );      // set enable
+    Stepper[motor].isMoving = true;    // start interrupt working
   }
 
 }
@@ -695,6 +701,33 @@ void startMovingAll( uint8_t motorMask, uint8_t disableOnStopMask ) {
 
     if ( motorMask & mask ) {
       startMoving( i, ( disableOnStopMask & mask ) );
+    }
+
+    mask = mask * 2;
+
+  }
+
+}
+
+void stopMoving( uint8_t motor ) {
+  // stop a motor immediately
+  
+  Stepper[motor].isMoving = false;
+  Stepper[motor].stepsToGo = 0;
+  write595( ENABLE[motor], Stepper[motor].disableOnStop );
+
+}
+
+void stopMovingAll( uint8_t motorMask ) {
+  // stop multiple motors immediately
+  
+  int i;
+  int mask = 1;
+  
+  for (i=0; i<MaxStepper; i++ ) {
+
+    if ( motorMask & mask ) {
+      stopMoving( i );
     }
 
     mask = mask * 2;
@@ -1068,12 +1101,20 @@ void cmdInterpreter( void ) {
         homing( motor, Cmd2Long(2), CmdBlock.Cmd[6] );
         break;
 
+      case CMD_STOPMOVING:
+        // Motor
+        stopMoving( motor );
+        break;
+        
+      case CMD_STOPMOVINGALL:
+        // Mask motor
+        stopMovingAll( CmdBlock.Cmd[1] );
+        break;
+
     }
 
-   // incomming cmd: reset watchdog counter
-    watchdogCounter = watchdog;
-       
   }
+
 }
 
 void receiveEvent(int uint8_tsReceived){
@@ -1147,6 +1188,18 @@ void loop() {
   if ( ( now < lastStep ) || ( now > lastStep + stepperInterval ) ) {
     lastStep = now;
     StepperTimer();
+  }
+
+  // Watchdog Timer
+  // check only, if watchdog is active
+  if ( watchdog > 0 ) {
+    // check if watchdog-Time is reached
+    if ( millis() > watchdog ) {
+      // watchdog is reached, stop all motors and stop watchdog
+      stopMovingAll( 0x0F );
+      watchdog = -1;
+    }
+
   }
 
 }

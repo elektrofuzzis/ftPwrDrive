@@ -2,9 +2,11 @@
 //
 // ftPwrDrive Arduino Interface
 //
-// 20.09.2019 V0.93 / latest version
+// 31.12.2019 V0.94 / latest version
 //
 // (C) 2019 Christian Bergschneider & Stefan Fuss
+//
+// PLEASE USE AT LEAST FIRMWARE 0.94 !!!
 //
 ///////////////////////////////////////////////////
 
@@ -16,28 +18,40 @@
 // some constant to make live easier:
  
 // microstep modes
-static const uint8_t FTPWRDRIVE_FULLSTEP = 0, FTPWRDRIVE_HALFSTEP = 4, FTPWRDRIVE_QUARTERSTEP = 2, FTPWRDRIVE_EIGTHSTEP = 6, FTPWRDRIVE_SIXTEENTHSTEP = 7;
+static const uint8_t FULLSTEP = 0, HALFSTEP = 4, QUARTERSTEP = 2, EIGTHSTEP = 6, SIXTEENTHSTEP = 7;
     
 // servo numbers
-static const uint8_t FTPWRDRIVE_S1 = 0, FTPWRDRIVE_S2 = 1, FTPWRDRIVE_S3 = 2, FTPWRDRIVE_S4 = 3;
+static const uint8_t S1 = 0, S2 = 1, S3 = 2, S4 = 3;
 
 // number of servos
-static const uint8_t FTPWRDRIVE_SERVOS = 4;
+static const uint8_t SERVOS = 4;
 
 // enumeration of servo numbers
-static const uint8_t FTPWRDRIVE_S[ FTPWRDRIVE_SERVOS ] = { FTPWRDRIVE_S1, FTPWRDRIVE_S2, FTPWRDRIVE_S3, FTPWRDRIVE_S4 };
+static const uint8_t S[ SERVOS ] = { S1, S2, S3, S4 }; // backward compatibility only
 
 // motor numbers
-static const uint8_t FTPWRDRIVE_M1 = 1, FTPWRDRIVE_M2 = 2, FTPWRDRIVE_M3 = 4, FTPWRDRIVE_M4 = 8;
+static const uint8_t M1 = 1, M2 = 2, M3 = 4, M4 = 8;
 
 // number of motors
-static const uint8_t FTPWRDRIVE_MOTORS = 4;
+static const uint8_t MOTORS = 4;
     
 // enumeration of motor numbers
-static const uint8_t FTPWRDRIVE_M[ FTPWRDRIVE_MOTORS ] = { FTPWRDRIVE_M1, FTPWRDRIVE_M2, FTPWRDRIVE_M3, FTPWRDRIVE_M4 };
+static const uint8_t M[ MOTORS ] = { M1, M2, M3, M4 };
 
 // flags, i.e. used in getState
-static const uint8_t FTPWRDRIVE_ISMOVING = 1, FTPWRDRIVE_ENDSTOP = 2, FTPWRDRIVE_EMERCENCYSTOP = 4, FTPWRDRIVE_HOMING = 8;
+static const uint8_t ISMOVING = 1, ENDSTOP = 2, EMERCENCYSTOP = 4, HOMING = 8;
+
+// gears
+static const uint8_t Z10 = 10, Z12 = 12, Z15 = 15, Z20 = 20, Z30 = 30, Z40 = 40, Z58 = 58, WORMSCREW = 5;
+
+// same constants for backward compatibility only
+static const uint8_t FTPWRDRIVE_FULLSTEP = FULLSTEP, FTPWRDRIVE_HALFSTEP = HALFSTEP, FTPWRDRIVE_QUARTERSTEP = QUARTERSTEP, FTPWRDRIVE_EIGTHSTEP = EIGTHSTEP, FTPWRDRIVE_SIXTEENTHSTEP = SIXTEENTHSTEP; 
+static const uint8_t FTPWRDRIVE_S1 = S1, FTPWRDRIVE_S2 = S2, FTPWRDRIVE_S3 = S3, FTPWRDRIVE_S4 = S4;
+static const uint8_t FTPWRDRIVE_SERVOS = SERVOS;
+static const uint8_t FTPWRDRIVE_M1 = M1, FTPWRDRIVE_M2 = M2, FTPWRDRIVE_M3 = M3, FTPWRDRIVE_M4 = M4;
+static const uint8_t FTPWRDRIVE_MOTORS = MOTORS;
+static const uint8_t FTPWRDRIVE_M[ MOTORS ] = { M1, M2, M3, M4 }; 
+static const uint8_t FTPWRDRIVE_ISMOVING = ISMOVING, FTPWRDRIVE_ENDSTOP = ENDSTOP, FTPWRDRIVE_EMERCENCYSTOP = EMERCENCYSTOP, FTPWRDRIVE_HOMING = HOMING;
 
 class ftPwrDrive {
   public:
@@ -75,8 +89,14 @@ class ftPwrDrive {
     void startMoving( uint8_t motor, boolean disableOnStop = true );
       // start motor moving, disableOnStop disables the motor driver at the end of the movement
       
-    void startMovingAll( uint8_t maskMotor, uint8_t maskDisableOnStop = FTPWRDRIVE_M1|FTPWRDRIVE_M2|FTPWRDRIVE_M3|FTPWRDRIVE_M4 );
+    void startMovingAll( uint8_t maskMotor, uint8_t maskDisableOnStop = M1|M2|M3|M4 );
       // same as StartMoving, but using uint8_t masks
+      
+    void stopMoving( uint8_t motor );
+      // stop motor moving immediately
+      
+    void stopMovingAll( uint8_t maskMotor = M1|M2|M3|M4 );
+      // same as stopMoving, but using uint8_t masks
       
     boolean isMoving( uint8_t motor );
       // check, if a motor is moving
@@ -155,8 +175,35 @@ class ftPwrDrive {
     boolean isHoming( uint8_t motor );
       // check, homing is active
 
+    float setGearFactor( uint8_t motor, long gear1, long gear2 );
+      // Sets the gear factor. Please read setRelDistanceR for details.
+      
+    float setGearFactor( uint8_t motor, float gear1, float gear2 );
+      // Sets the gear factor. Please read setRelDistanceR for details.
+
+    void setRelDistanceR( uint8_t motor, float distance );
+      // Sets the relative distance in R - real units.
+      // To use this function, you should det your gear factor by setGearFactor, first.
+      // motor - M1..M4
+      // distance - relative distance in real units.
+      // Example1:
+      //   setGearFactor( Z10, Z40)  sets your gear to motor -> Z10 -> Z40. Every turn of your motor will devided by 4.
+      //   setRelDistanceR( M1, 10 ) will move your gear 10 times. The motor will run 10 * 40 * 200 steps. (200 steps are one turn of your motor).
+      // Example2:
+      //   setGearFactor( 1, WORMSCREW )  sets your gear to motor -> Wormscrew. Every turn of your motor will move your linear system by 5 mm.
+      //   setRelDistanceR( M1, 10 ) will move linear system by 10 mm. The motor will run 10 * 5 * 200 steps. (200 steps are one turn of your motor).
+
+    void setAbsDistanceR( uint8_t motor, float distance );
+      // Sets the absolute distance in R - real units. Please read setRelDistanceR for details.
+
   private:
     uint8_t i2cAddress = 32;
+
+    float gearFactor[ MOTORS ] = { 1,1,1,1 };
+
+    uint8_t motorIndex( uint8_t motor );
+     // returns the index (0..3) of a motor
+
 };
 
 
