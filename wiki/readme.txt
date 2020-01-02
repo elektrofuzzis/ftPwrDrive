@@ -1,0 +1,1 @@
+Due to a bug with Github Desktop and pushing files to a wiki, we use this folder to store images.
