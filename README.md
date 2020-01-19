@@ -3,7 +3,7 @@ The ftPwrDrive is a i²c based stepper motor driver for fischertechnik, Arduino 
 
 Please checkout the <a href="https://github.com/elektrofuzzis/ftPwrDrive/wiki">online manual</a>. Since the hardware is a complex smd pcb, you could buy a plug&play device at <a href="https://gundermann-software.de/shop/">gundermann.org</a>.
 
-To check out the latest releases please follow up the <a href="https://github.com/elektrofuzzis/ftPwrDrive/wiki/Changelog">version history</a>
+To check out the latest releases please follow up the <a href="https://github.com/elektrofuzzis/ftPwrDrive/wiki/Changelog">version history</a>.
 
 <hr width="100%" />
 
