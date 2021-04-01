@@ -11,4 +11,4 @@ Der ftPwrDrive ist ein Schrittmotortreiber für fischertechnik, Arduino &amp; Ra
 
 Bitte lesen Sie das <a href="https://github.com/elektrofuzzis/ftPwrDrive/wiki">Online Manual</a>. Die Hardware besteht aus einer komplexen, SMD-bestückten Platine. Sie können den ftPwrDrive auch als fertiges Gerät bei <a href="https://gundermann-software.de/shop/">gundermann.org</a> bestellen.
 
-Das Changelog für die aktuelle Version finden sie <a href="https://github.com/elektrofuzzis/ftPwrDrive/wiki/Changelog">hier</a>.
+Das Changelog für die aktuelle Version finden sie<a href="https://github.com/elektrofuzzis/ftPwrDrive/wiki/Changelog"> hier</a>.
