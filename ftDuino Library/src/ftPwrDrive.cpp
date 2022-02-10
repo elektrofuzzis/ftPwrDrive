@@ -2,11 +2,11 @@
 //
 // ftPwrDrive Arduino Interface
 //
-// 31.12.2019 V0.94 / latest version
+// 01.01.2022 V0.98 / latest version
 //
-// (C) 2019 Christian Bergschneider & Stefan Fuss
+// (C) 2022 Christian Bergschneider & Stefan Fuss
 //
-// PLEASE USE AT LEAST FIRMWARE 0.94 !!!
+// PLEASE USE AT LEAST FIRMWARE 0.98 !!!
 //
 ///////////////////////////////////////////////////
 
@@ -59,6 +59,11 @@
 #define CMD_STOPMOVING         33  // void stopMoving( uint8_t motor )                                  stop motor moving
 #define CMD_STOPMOVINGALL      34  // void stopMovingAll( uint8_t maskMotor )                           same as StartMoving, but using uint8_t masks
 
+#define CMD_SETINSYNC          35  // void setInSync( unit8_t motor1, uint8_t motor2, boolean OnOff)    set two motors running in sync
+
+#define CMD_HOMINGOFFSET       36  // void homingOffset( unit8_t motor1, ulong offset )                 set offset to run during homing, after endstop is free again 
+
+
 i2cBuffer i2c;
 
 ftPwrDrive::ftPwrDrive( uint8_t myI2CAddress ) { 
@@ -85,6 +90,14 @@ uint8_t ftPwrDrive::getMicrostepMode( void ) {
 void ftPwrDrive::setRelDistance( uint8_t motor, long distance ) {
   // set a distance to go, relative to actual position
   i2c.sendData( i2cAddress, CMD_SETRELDISTANCE, motor, distance );
+}
+
+void ftPwrDrive::setRelDistanceAll( long d1, long d2, long d3, long d4 ) {
+  // set a relative distance to go for all motors
+  setRelDistance( M1, d1 );
+  setRelDistance( M2, d2 );
+  setRelDistance( M3, d3 );
+  setRelDistance( M4, d4 );
 }
 
 void ftPwrDrive::setAbsDistance( uint8_t motor, long distance ) {
@@ -258,6 +271,11 @@ boolean ftPwrDrive::isHoming( uint8_t motor ) {
   return getState( motor ) & HOMING;
 }
 
+void ftPwrDrive::homingOffset( uint8_t motor, long offset ) {
+  // set Offset to run in homing, after endstop is free again
+  i2c.sendData( i2cAddress, CMD_HOMINGOFFSET, motor, offset );
+}
+
 void ftPwrDrive::wait( uint8_t motor_mask, uint16_t interval = 100 ) {
   // wait until all motors in motor_mask completed their work
 
@@ -300,6 +318,12 @@ void ftPwrDrive::setAbsDistanceR( uint8_t motor, float distance ) {
 
   setAbsDistance( motor, gearFactor[ motorIndex( motor ) ] * 200 * distance );
 
+}
+
+void ftPwrDrive::setInSync( uint8_t motor1, uint8_t motor2, boolean OnOff) {
+  // set two motors running in sync
+
+  i2c.sendData( i2cAddress, CMD_SETINSYNC, motor1, motor2, OnOff);
 }
 
 uint8_t ftPwrDrive::motorIndex( uint8_t motor ) {

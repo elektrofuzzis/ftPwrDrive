@@ -2,11 +2,11 @@
 //
 // ftPwrDrive Arduino Interface
 //
-// 31.12.2019 V0.94 / latest version
+// 01.01.2022 V0.98 / latest version
 //
-// (C) 2019 Christian Bergschneider & Stefan Fuss
+// (C) 2022 Christian Bergschneider & Stefan Fuss
 //
-// PLEASE USE AT LEAST FIRMWARE 0.94 !!!
+// PLEASE USE AT LEAST FIRMWARE 0.98 !!!
 //
 ///////////////////////////////////////////////////
 
@@ -60,17 +60,22 @@ class ftPwrDrive {
       // constructor
       
     void Watchdog( long w );
-      // set wartchog timer
+      // set watchog timer
       
     void setMicrostepMode( uint8_t mode );
-      // set microstep mode - FILLSTEP, HALFSTEP, QUARTERSTEP, EIGTHSTEP, SIXTEENTHSTEP
+      // set microstep mode
+      // FILLSTEP, HALFSTEP, QUARTERSTEP, EIGTHSTEP, SIXTEENTHSTEP
       
     uint8_t getMicrostepMode( void );
-      // get microstep mode - FILLSTEP, HALFSTEP, QUARTERSTEP, EIGTHSTEP, SIXTEENTHSTEP
+      // get microstep mode
+      // FILLSTEP, HALFSTEP, QUARTERSTEP, EIGTHSTEP, SIXTEENTHSTEP
       
     void setRelDistance( uint8_t motor, long distance );
       // set a distance to go, relative to actual position
       
+    void setRelDistanceAll( long d1, long d2, long d3, long d4 );
+      // set a absolute distance to go for all motors
+
     void setAbsDistance( uint8_t motor, long distance );
       // set a absolute distance to go
       
@@ -174,6 +179,9 @@ class ftPwrDrive {
 
     boolean isHoming( uint8_t motor );
       // check, homing is active
+	  
+	void homingOffset( uint8_t motor, long offset );
+	  // set Offset to run in homing, after endstop is free again
 
     float setGearFactor( uint8_t motor, long gear1, long gear2 );
       // Sets the gear factor. Please read setRelDistanceR for details.
@@ -195,6 +203,9 @@ class ftPwrDrive {
 
     void setAbsDistanceR( uint8_t motor, float distance );
       // Sets the absolute distance in R - real units. Please read setRelDistanceR for details.
+
+    void setInSync( uint8_t motor1, uint8_t motor2, boolean OnOff);
+      // set two motors running in sync
 
   private:
     uint8_t i2cAddress = 32;

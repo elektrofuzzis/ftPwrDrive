@@ -1,12 +1,24 @@
-////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 // ftPwrDrive Firmware
 //
-// 31.12.2019 V0.94 / latest version
+// 10.02.2022 V0.99
 //
-// (C) 2019 Christian Bergschneider & Stefan Fuss
+// (C) 2019-2022 Christian Bergschneider & Stefan Fuss
 //
-///////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+// Bugfixes & Features:
+//
+// #0007 Optimized homing
+//
+// #0008 some bugfixes to check, if there is not need to start moving
+//
+// #0009 bugfix checking "inSync"-Option in stepperTimer 
+//
+// #0010 Optimized homing using ft switches
+//
+// #0011 bugfix change max power settings
 
 #include <Arduino.h>
 
@@ -20,7 +32,7 @@
 
 // ********* some useful definitions *********
 
-#define myVersion 0.94
+#define myVersion 0.99
 
 // micro stepping modes
 #define FULLSTEP      0
@@ -74,26 +86,36 @@
 #define CMD_STOPMOVING         33  // void stopMoving( uint8_t motor )                                  stop motor moving
 #define CMD_STOPMOVINGALL      34  // void stopMovingAll( uint8_t maskMotor )                           same as StartMoving, but using uint8_t masks
 
+#define CMD_SETINSYNC          35  // void setInSync( unit8_t motor1, uint8_t motor2, boolean OnOff)    set two motors running in sync
+
+#define CMD_HOMINGOFFSET       36  // void homingOffset( unit8_t motor1, ulong offset )                 set offset to run during homing, after endstop is free again 
+
 #define stepperInterval        100  // 10kHz
 #define servoInterval           25  // 40kHz
 
-#define HOMING_OFF 0
+#define HOMING_OFF    0
 #define HOMING_PHASE1 1
 #define HOMING_PHASE2 2
+#define HOMING_PHASE3 3
 
 // type to control one stepper
 struct t_stepper {
   long    cycle = 0; 
   long    cycleCounter = 0;
   long    stepsToGo = 0;              // distance in steps to go
-  uint8_t cw = 1;                     // running counterwise 1, contra clockwise -1
+  int8_t  cw = 1;                     // running counterwise 1, contra clockwise -1
+  int8_t  cwEndStop = 0;              // cw-mode before getting an end stop trigger event,  0 = unknown state
   long    position = 0;               // absolute position
   long    maxSpeed = 0;
   long    acceleration = 0;
   boolean disableOnStop = true;
   boolean isMoving = false;
   uint8_t homing = HOMING_OFF;
+  long    homingOffset = 0;          // steps to go during homing, if endstop is released in phase 2
   boolean endStop = false;
+  boolean ignoreEndStop = false;     // semaphore to ignore an end stop trigger, to move out of an triggered event
+  uint8_t inSyncWith;                // the motor, I'm running in sync. if none, my own number
+  
 };
 
 #define SERVOINTERNALOFFSET 60
@@ -152,6 +174,96 @@ int mySerialNumber = 0;
 #define NORMAL           0
 uint8_t mode = NORMAL;
 
+// ************ motor current control ***************
+boolean      boardV3 = false;
+
+float getCurrent( uint8_t digits) {
+  // gets the motors current setting
+  // works only in V2 mode
+
+  int a;
+  float v,c;
+
+  if (boardV3) {
+    return maxMotorCurrent;
+  }
+
+  // get reading
+  a = analogRead( MREFI );
+  // convert to volts
+  v = ( (float) a ) / 1024 * 2.56;   
+  // calculate motor current
+  c = v / ( 8 * 0.068 );
+
+  // return c with 2 digits precision
+  return ((float) ((int)(c*digits))) / digits; 
+  
+}
+
+bool checkCurrent(float givenCurrent) {
+  // checks, in actualReading fits to a given value
+
+  if (boardV3) {
+    return true;
+  }
+
+  // getCurrent
+  float c = getCurrent(100);
+
+  // check deviation
+  if (abs( givenCurrent - c ) <= 0.05 ) {
+    // in tolerance
+    return true;
+    
+  } else {
+    // first reading out of tolaerance, try a second one
+    delay(50);
+    c = getCurrent(100);
+    return (abs( givenCurrent - c ) <= 0.05 );
+
+  }
+
+}
+
+void setCurrent(float current) {
+
+  if (boardV3) {
+    return;
+  }
+
+  if ( getCurrent( 10 ) != current ) {
+
+    Serial.println( "Please turn the trim resistor to set the motor current." );
+  
+    while ( getCurrent( 10 ) != current ) {
+      Serial.print("max current: "); Serial.print(  getCurrent( 100 ) );
+      Serial.println( "A" );
+      delay( 100 );
+    }
+    
+  }
+  
+}
+
+void writeDAC( uint8_t dac, uint8_t value ) {
+
+  uint16_t cmd = ((uint16_t)dac) << 14 | 0x1000 | ((uint16_t) value) << 4;
+
+  digitalWrite( MREFI, LOW );
+  SPI.transfer16( cmd );
+  digitalWrite( MREFI, HIGH );
+}
+
+void writeDACC( uint8_t dac, float current ) {
+
+  // convert current to reference volts
+  float   v   = current * ( 8 * 0.068 );
+
+  uint8_t x =  (uint8_t)( v / 2.0 * 256 );
+
+  writeDAC( dac, x );
+}
+
 // ********** init hardware & maintenance mode **********
 
 void initializeHardware( void ) {
@@ -161,6 +273,24 @@ void initializeHardware( void ) {
 
   // *** SPI ***
   SPI.begin();
+  SPI.setBitOrder(MSBFIRST);
+  SPI.setDataMode(SPI_MODE2);
+
+  // Board Type with DAC?
+
+  analogReference(INTERNAL);
+  pinMode(MREFI, INPUT);
+  boardV3 = (analogRead( MREFI ) > 1000);
+
+  if ( boardV3) {
+  
+    pinMode( MREFI, OUTPUT );
+  
+    for (i = 0; i<4; i++ ) {
+      writeDACC(i, maxMotorCurrent );
+    }
+
+  };
 
   // *** all stepper stuff ***
 
@@ -252,6 +382,8 @@ void writeEEPROM( void ) {
   
 }
 
+/*
+
 float maxCurrent( int digits ) {
   // reads the reference voltage
 
@@ -270,6 +402,7 @@ float maxCurrent( int digits ) {
   // return c with 2 digits precision
   return ((float) ((int)(c*digits))) / digits;  
 }
+*/
 
 void BannerText( void ) {
 
@@ -281,16 +414,18 @@ void BannerText( void ) {
   Serial.println( "|_|  \\__|_|      \\_/\\_/ |_|  |_____/|_|  |_| \\_/ \\___|" );
   Serial.println( "" );
   Serial.println( "(C) 2019 Christian Bergschneider & Stefan Fuss" );
-  Serial.print  ( "                 Version " ); Serial.println( myVersion );
   Serial.println( "" );
-  
+
+  Serial.print  ( "Board type:         "); if (boardV3) { Serial.println("V3"); } else { Serial.println("V2"); }
+  Serial.print  ( "FW-Version          "); Serial.println( myVersion );
+
   Serial.print  ( "Serial number:      ");  Serial.println( mySerialNumber );
   Serial.print  ( "I2C-Address:        " ); Serial.println( myI2CBusAddress );
 
   // need some time to get a first correct value
-  float c = maxCurrent(100);
+  float c = getCurrent(100);
   delay(50);
-  c = maxCurrent(100);
+  c = getCurrent(100);
   
   Serial.print  ( "max. motor current: " ); Serial.print( maxMotorCurrent ); Serial.print( "A / " ); Serial.print( c ); Serial.println( "A" );
 
@@ -326,6 +461,11 @@ void setup() {
   // initialize serial
   Serial.begin( 9600 );
   Serial.setTimeout( 0 );
+
+  // initialize Stepper
+  for (int i=0; i<MaxStepper; i++) {
+    Stepper[i].inSyncWith = i;
+  }
 
   BannerText();
 
@@ -400,12 +540,12 @@ void setMaxCurrent( void ) {
     }
   }
 
-  if ( maxCurrent( 10 ) != newMaxMotorCurrent ) {
+  if ( ( getCurrent( 10 ) != newMaxMotorCurrent ) && (!boardV3) ) {
 
     Serial.println( "Please turn the trim resistor to set the motor current." );
-  
+
     while (c != newMaxMotorCurrent ) {
-      c = maxCurrent( 100 );
+      c = getCurrent( 100 );
       Serial.print("max current: "); Serial.print( c );
       Serial.println( "A" );
       delay( 100 );
@@ -586,10 +726,8 @@ void StepperTimer( void ) {
 
         if ( (!endStop) && (Stepper[i].endStop) && ( Stepper[i].homing == HOMING_PHASE2 ) ) {
            // end stop released during homing
-           Stepper[i].stepsToGo = 0;                          // stop moving
-           Stepper[i].isMoving  = false;                      // stop moving
-           write595( ENABLE[i], Stepper[i].disableOnStop );   // disable driver when needed
-           Stepper[i].homing    = HOMING_OFF;                 // homing is done now
+           Stepper[i].stepsToGo = Stepper[i].homingOffset;    // set steps to go additionally
+           Stepper[i].homing    = HOMING_PHASE3;              // start 3rd pahse and run the additional steps
         } 
 
         // store the new state
@@ -600,14 +738,38 @@ void StepperTimer( void ) {
      // check, if the stepper is running
      if ( Stepper[i].isMoving > 0 ) {
 
-       // check on ES or EMS - only if homing is off
-       if ( ( ( Stepper[i].endStop ) && ( Stepper[i].homing != HOMING_PHASE2 ) ) || emergencyStop ) {
+       // check on ES or EMS - only if homing is off and ignoreEndStop isn't set
+       if ( ( ( Stepper[i].endStop ) && 
+              ( Stepper[i].homing != HOMING_PHASE2 ) && 
+              ( Stepper[i].homing != HOMING_PHASE3 ) && 
+              ( Stepper[i].ignoreEndStop == false ) 
+            ) || emergencyStop ) {
 
-          Stepper[i].isMoving = false;
-          Stepper[i].stepsToGo = 0;
-          write595( ENABLE[i], Stepper[i].disableOnStop );
+          // stop all motors which are in sync (I'm is in sync with myself)
+          for (int j=0; j<MaxStepper; j ++ ) {
+
+            if ( Stepper[j].inSyncWith == i ) {
+         
+              // stop moving
+              Stepper[j].isMoving = false;
+              Stepper[j].stepsToGo = 0;
+
+              // store cw mode before stopping
+              Stepper[j].cwEndStop = Stepper[j].cw;
+
+              // set disableOnStop
+              write595( ENABLE[j], Stepper[j].disableOnStop );
+              
+            }
+            
+          }
           
        } else {
+
+         // reset ignoreEndStop
+         if ( Stepper[i].ignoreEndStop ) {
+          Stepper[i].ignoreEndStop = !Stepper[i].endStop;
+         }
 
          // check if cycle ended
          Stepper[i].cycleCounter--;
@@ -622,8 +784,9 @@ void StepperTimer( void ) {
 
            // check if motion has to stop
            if ( Stepper[i].stepsToGo <= 0 ) {
-             Stepper[i].isMoving = false;
-             write595( ENABLE[i], Stepper[i].disableOnStop );
+             Stepper[i].isMoving = false;                       // stop moving
+             write595( ENABLE[i], Stepper[i].disableOnStop );   // disable motor current if needed
+             Stepper[i].homing    = HOMING_OFF;                 // if it was homing, it's all done now
            }
          
          }
@@ -646,7 +809,20 @@ void setWatchdog( long w ) {
   
 }
 
-void setRelDistance( uint8_t motor, long relDistance ) {
+void setRelDistance( uint8_t motor, long relDistance, boolean force = false ) {
+
+  // cmd is only accepted on the primary motor
+  if ( ( Stepper[motor].inSyncWith != motor ) && !force ) {
+    return;
+  }
+  
+  // check if another motor is inSnycWith this motor
+  for (int i=0; i<MaxStepper; i++ ) {
+    if ( ( Stepper[i].inSyncWith == motor ) && ( i != motor ) ) {
+      // run same command
+      setRelDistance( i, relDistance );
+    }
+  }
 
   // check to run clockwise or counterclockwise
   if ( relDistance < 0 ) {
@@ -661,33 +837,78 @@ void setRelDistance( uint8_t motor, long relDistance ) {
 
   // set distance 
   Stepper[motor].stepsToGo = abs(relDistance);
+
 }
 
 void setAbsDistance( uint8_t motor, long absDistance ) {
   // set a absolute distance to go to
 
-  setRelDistance( motor, Stepper[motor].position - absDistance );
+  setRelDistance( motor, absDistance - Stepper[motor].position );
 
 }
 
-void setMaxSpeed( uint8_t motor, long speed ) {
+void setMaxSpeed( uint8_t motor, long speed, boolean force = false ) {
   // set cyle times, speed is steps/second
+
+  // cmd is only accepted on the primary motor
+  if ( ( Stepper[motor].inSyncWith != motor ) && !force ) {
+    return;
+  }
+  
+  // check if another motor is inSnycWith this motor
+  for (int i=0; i<MaxStepper; i++ ) {
+    if ( ( Stepper[i].inSyncWith == motor ) && ( i != motor ) ) {
+      // run same command
+      setMaxSpeed( i, speed, true );
+    }
+  }
 
   Stepper[motor].maxSpeed = speed;
   Stepper[motor].cycle = (long)( (1 / (float) speed ) * 1000000 / stepperInterval);
 
 }
 
-void startMoving( uint8_t motor, boolean disableOnStop ) {
+void startMoving( uint8_t motor, boolean disableOnStop, boolean force = false ) {
   // start a motor
 
-  // start moving, if endStop and EMS are off
-  if (!(emergencyStop || Stepper[motor].endStop )) {
-
-    Stepper[motor].disableOnStop = disableOnStop;
-    write595( ENABLE[motor], 0 );      // set enable
-    Stepper[motor].isMoving = true;    // start interrupt working
+  // cmd is only accepted on the primary motor
+  if ( ( Stepper[motor].inSyncWith != motor ) && !force ) {
+    return;
   }
+ 
+  // check if another motor is inSnycWith this motor
+  for (int i=0; i<MaxStepper; i++ ) {
+    if ( ( Stepper[i].inSyncWith == motor ) && ( i != motor ) ) {
+      // run same command
+      startMoving( i, disableOnStop, true );
+    }
+  }
+
+  // don't start if emercencyStop is activated
+  if ( emergencyStop ) {
+    return;
+  }
+
+  // if endStop is triggered, test to move in "the other direction" 
+  if ( Stepper[motor].endStop ) {  
+    // endStop is triggered
+    
+    if ( Stepper[motor].cwEndStop == 0 ) { 
+      // last direction is unknown, so don't start moving
+      return;
+    }
+    
+    if ( Stepper[motor].cwEndStop == Stepper[motor].cw ) { 
+      // last direction is the same as the new direction, so don't start moving
+      return;
+    }
+    
+  }
+
+  // now, the stepper could start
+  Stepper[motor].disableOnStop = disableOnStop;
+  write595( ENABLE[motor], 0 );      // set enable
+  Stepper[motor].isMoving = true;    // start interrupt working
 
 }
 
@@ -709,8 +930,21 @@ void startMovingAll( uint8_t motorMask, uint8_t disableOnStopMask ) {
 
 }
 
-void stopMoving( uint8_t motor ) {
+void stopMoving( uint8_t motor, boolean force = false ) {
   // stop a motor immediately
+
+ // cmd is only accepted on the primary motor
+  if ( ( Stepper[motor].inSyncWith != motor ) && !force ) {
+    return;
+  }
+  
+  // check if another motor is inSnycWith this motor
+  for (int i=0; i<MaxStepper; i++ ) {
+    if ( ( Stepper[i].inSyncWith == motor ) && ( i != motor ) ) {
+      // run same command
+      stopMoving( i, true );
+    }
+  }
   
   Stepper[motor].isMoving = false;
   Stepper[motor].stepsToGo = 0;
@@ -773,10 +1007,24 @@ uint8_t getStatusMotor( uint8_t motor ) {
          
 }
 
-void setPosition( uint8_t motor, long position ) {
+void setPosition( uint8_t motor, long position, boolean force = false ) {
   // sets motor position
 
+  // cmd is only accepted on the primary motor
+  if ( ( Stepper[motor].inSyncWith != motor ) && !force ) {
+    return;
+  }
+  
+  // check if another motor is inSnycWith this motor
+  for (int i=0; i<MaxStepper; i++ ) {
+    if ( ( Stepper[i].inSyncWith == motor ) && ( i != motor ) ) {
+      // run same command
+      setPosition( i, position, true );
+    }
+  }
+
   Stepper[motor].position = position;
+  
 }
 
 void getPositionAll() {
@@ -789,8 +1037,22 @@ void getPositionAll() {
   
 }
 
-void setAcceleration( uint8_t motor, long acceleration) {
+void setAcceleration( uint8_t motor, long acceleration, boolean force = false) {
   // sets acceleration
+
+  // cmd is only accepted on the primary motor
+  if ( ( Stepper[motor].inSyncWith != motor ) && !force ) {
+    return;
+  }
+ 
+  // check if another motor is inSnycWith this motor
+  for (int i=0; i<MaxStepper; i++ ) {
+    if ( ( Stepper[i].inSyncWith == motor ) && ( i != motor ) ) {
+      // run same command
+      setAcceleration( i, acceleration, true);
+    }
+  }
+  
   Stepper[motor].acceleration = acceleration;
 }
 
@@ -870,9 +1132,41 @@ void homing( uint8_t motor, long maxDistance, boolean disableOnStop ) {
   //   1. run maxDistance and stop if maxDistance is reached or end stop found.
   //   2. if end stop found, run with 1/10 speed until end stop is released
 
+  // cmd is only accepted on the primary motor
+  if ( Stepper[motor].inSyncWith != motor ) {
+    return;
+  }
+
   Stepper[motor].homing = HOMING_PHASE1;
   setRelDistance( motor, maxDistance );
   startMoving( motor, disableOnStop );
+
+}
+
+void homingOffset( uint8_t motor, long Offset) {
+  // Apply homing offset to run in HOMING_PHASE3
+  Stepper[motor].homingOffset = abs( Offset );
+} 
+
+void setInSync( uint8_t motor1, uint8_t motor2, boolean on ) {
+  // set two motors to run in sync
+
+  for (int i=0; i<MaxStepper; i++ ) {
+
+   // check if a motor is already syncronized with m1 oder m2: stop motor and "unsync" it
+   if ( ( Stepper[i].inSyncWith = motor1 ) || ( Stepper[i].inSyncWith = motor2 ) ) {
+    stopMoving( i );
+    Stepper[i].inSyncWith = i;
+   }
+
+  }
+
+  // if "on" connect the two motors
+  if ( on ) {
+    Stepper[motor2].inSyncWith = motor1;
+    Stepper[motor2].maxSpeed = Stepper[motor1].maxSpeed;
+    Stepper[motor2].acceleration = Stepper[motor1].acceleration;
+  }
 
 }
 
@@ -1111,6 +1405,15 @@ void cmdInterpreter( void ) {
         stopMovingAll( CmdBlock.Cmd[1] );
         break;
 
+      case CMD_SETINSYNC:
+        // motor1, motor2, on
+        setInSync( motor, interface2motor( CmdBlock.Cmd[2] ), CmdBlock.Cmd[3] );
+        break;
+
+      case CMD_HOMINGOFFSET:
+        // motor, offset
+        homingOffset( motor, Cmd2Long(2) );
+        break;
     }
 
   }
@@ -1174,7 +1477,7 @@ void loop() {
   }
 
   // check if reference voltage is in range
-  if ( abs( maxMotorCurrent - maxCurrent(100) ) > 0.05 ) {
+  if ( abs( maxMotorCurrent - getCurrent(100) ) > 0.05 ) {
     mode = MAINTENANCE;
     activateErrorLED();
   }
